@@ -1,27 +1,43 @@
-# Class: prometheus::alerts
+# Define: prometheus::alerts
 #
-# This module manages prometheus alerts for prometheus
-#
-#  [*location*]
-#  Whether to create the alert file for prometheus
+# This module manages prometheus alert files for prometheus
 #
 #  [*alerts*]
-#  Array of alerts (see README)
+#  Array (< prometheus 2.0.0) or Hash (>= prometheus 2.0.0) of alerts (see README).
 #
-class prometheus::alerts (
-  String $location,
-  Array  $alerts,
-  String $alertfile_name  = 'alert.rules'
-) inherits prometheus::params {
-
-    if $alerts != [] {
-        file{ "${location}/${alertfile_name}":
-                ensure  => 'file',
-                owner   => $prometheus::user,
-                group   => $prometheus::group,
-                notify  => Class['::prometheus::service_reload'],
-                content => epp("${module_name}/alerts.epp"),
-        }
+#  [*location*]
+#  Where to create the alert file for prometheus
+#
+define prometheus::alerts (
+  Variant[Array,Hash] $alerts,
+  String $location = "${prometheus::config_dir}/rules",
+  String $version  = $prometheus::version,
+  String $user     = $prometheus::user,
+  String $group    = $prometheus::group,
+  String $bin_dir  = $prometheus::bin_dir,
+) {
+  if ( versioncmp($version, '2.0.0') < 0 ){
+    file { "${location}/${name}.rules":
+      ensure       => 'file',
+      owner        => $user,
+      group        => $group,
+      notify       => Class['prometheus::service_reload'],
+      content      => epp("${module_name}/alerts.epp", {'alerts' => $alerts}),
+      validate_cmd => "${bin_dir}/promtool check-rules %",
+      require      => Class['prometheus::install'],
+      before       => Class['prometheus::config'],
     }
-
+  }
+  else {
+    file { "${location}/${name}.rules":
+      ensure       => 'file',
+      owner        => $user,
+      group        => $group,
+      notify       => Class['prometheus::service_reload'],
+      content      => $alerts.to_yaml,
+      validate_cmd => "${bin_dir}/promtool check rules %",
+      require      => Class['prometheus::install'],
+      before       => Class['prometheus::config'],
+    }
+  }
 }

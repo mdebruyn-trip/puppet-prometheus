@@ -20,8 +20,8 @@
 
 rc_reset
 
-PROMETHEUS_BIN=<%= scope.lookupvar('prometheus::bin_dir') %>/prometheus
-CONFIG_FILE=<%= scope.lookupvar('prometheus::config_dir') %>/prometheus.yaml
+PROMETHEUS_BIN=<%= scope.lookupvar('prometheus::server::bin_dir') %>/prometheus
+CONFIG_FILE=<%= scope.lookupvar('prometheus::server::config_dir') %>/<%= scope.lookupvar('prometheus::server::server::configname') %>
 LOG_FILE=/var/log/prometheus
 
 
@@ -36,11 +36,8 @@ case "$1" in
         echo -n "Starting prometheus "
         ## Start daemon with startproc(8). If this fails
         ## the return value is set appropriately by startproc.
-        startproc $PROMETHEUS_BIN -config.file="$CONFIG_FILE" \
-          -storage.local.path=<%= scope.lookupvar('prometheus::localstorage')%> \
-          -web.console.templates=<%= scope.lookupvar('prometheus::shared_dir') %>/consoles \
-          -web.console.libraries=<%= scope.lookupvar('prometheus::shared_dir') %>/console_libraries \
-          <%= scope.lookupvar('prometheus::extra_options') %> >> "$LOG_FILE"
+        startproc $PROMETHEUS_BIN <%= @daemon_flags.join(" \\\n          ") %> \
+          <%= scope.lookupvar('prometheus::server::extra_options') %> >> "$LOG_FILE"
 
         # Remember status and be verbose
         rc_status -v

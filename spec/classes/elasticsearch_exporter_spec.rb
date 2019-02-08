@@ -4,7 +4,7 @@ describe 'prometheus::elasticsearch_exporter' do
   on_supported_os.each do |os, facts|
     context "on #{os}" do
       let(:facts) do
-        facts
+        facts.merge(os_specific_facts(facts))
       end
 
       context 'with version specified' do
@@ -12,7 +12,9 @@ describe 'prometheus::elasticsearch_exporter' do
           {
             version: '1.0.0',
             arch: 'amd64',
-            os: 'linux'
+            os: 'linux',
+            bin_dir: '/usr/local/bin',
+            install_method: 'url'
           }
         end
 

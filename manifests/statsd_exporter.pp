@@ -79,56 +79,63 @@
 #
 #  [*version*]
 #  The binary release version
+
 class prometheus::statsd_exporter (
-  $arch                 = $::prometheus::params::arch,
-  $bin_dir              = $::prometheus::params::bin_dir,
-  $config_mode          = $::prometheus::params::config_mode,
-  $download_extension   = $::prometheus::params::statsd_exporter_download_extension,
-  $download_url         = undef,
-  $download_url_base    = $::prometheus::params::statsd_exporter_download_url_base,
-  $extra_groups         = $::prometheus::params::statsd_exporter_extra_groups,
-  $extra_options        = '',
-  $group                = $::prometheus::params::statsd_exporter_group,
-  $init_style           = $::prometheus::params::init_style,
-  $install_method       = $::prometheus::params::install_method,
-  $manage_group         = true,
-  $manage_service       = true,
-  $manage_user          = true,
-  $mapping_config_path  = $::prometheus::params::statsd_exporter_mapping_config_path,
-  $os                   = $::prometheus::params::os,
-  $package_ensure       = $::prometheus::params::statsd_exporter_package_ensure,
-  $package_name         = $::prometheus::params::statsd_exporter_package_name,
-  $purge_config_dir     = true,
-  $restart_on_change    = true,
-  $service_enable       = true,
-  $service_ensure       = 'running',
-  $statsd_maps          = $::prometheus::params::statsd_exporter_maps,
-  $user                 = $::prometheus::params::statsd_exporter_user,
-  $version              = $::prometheus::params::statsd_exporter_version,
-) inherits prometheus::params {
-  $real_download_url    = pick($download_url,"${download_url_base}/download/${version}/${package_name}-${version}.${os}-${arch}.${download_extension}")
-  validate_bool($purge_config_dir)
-  validate_bool($manage_user)
-  validate_bool($manage_service)
-  validate_bool($restart_on_change)
+  String $download_extension,
+  Variant[Stdlib::HTTPSUrl, Stdlib::HTTPUrl] $download_url_base,
+  Array $extra_groups,
+  String $group,
+  Stdlib::Absolutepath $mapping_config_path,
+  String $package_ensure,
+  String $package_name,
+  Array[Hash] $mappings,
+  String $user,
+  String $version,
+  String $arch                                                       = $prometheus::real_arch,
+  Stdlib::Absolutepath $bin_dir                                      = $prometheus::bin_dir,
+  String $config_mode                                                = $prometheus::config_mode,
+  Boolean $purge_config_dir                                          = true,
+  Boolean $restart_on_change                                         = true,
+  Boolean $service_enable                                            = true,
+  String $service_ensure                                             = 'running',
+  String $os                                                         = $prometheus::os,
+  String $init_style                                                 = $prometheus::init_style,
+  String $install_method                                             = $prometheus::install_method,
+  Boolean $manage_group                                              = true,
+  Boolean $manage_service                                            = true,
+  Boolean $manage_user                                               = true,
+  String $extra_options                                              = '',
+  Optional[Variant[Stdlib::HTTPSUrl, Stdlib::HTTPUrl]] $download_url = undef,
+) inherits prometheus {
+
+  # Prometheus added a 'v' on the realease name at 0.4.0 and changed the configuration format to yaml in 0.5.0
+  if versioncmp ($version, '0.5.0') == -1 {
+    fail("I only support statsd_exporter version '0.5.0' or higher")
+  }
+
+  $real_download_url = pick($download_url,"${download_url_base}/download/v${version}/${package_name}-${version}.${os}-${arch}.${download_extension}")
+
   $notify_service = $restart_on_change ? {
     true    => Service['statsd_exporter'],
     default => undef,
   }
-
-  $extra_statsd_maps = hiera_array('prometheus::statsd_exporter::statsd_maps',[])
-  $real_statsd_maps = concat($extra_statsd_maps, $prometheus::statsd_exporter::statsd_maps)
 
   file { $mapping_config_path:
     ensure  => 'file',
     mode    => $config_mode,
     owner   => $user,
     group   => $group,
-    content => template('prometheus/statsd_mapping.conf.erb'),
+    content => to_yaml({ mappings => $mappings }),
     notify  => $notify_service,
   }
 
-  $options = "-statsd.mapping-config=\'${prometheus::statsd_exporter::mapping_config_path}\' ${prometheus::statsd_exporter::extra_options}"
+  # Switched to POSIX like flags in version 0.7.0
+  if versioncmp ($version, '0.7.0') >= 0 {
+    $option_prefix = '--'
+  } else {
+    $option_prefix = '-'
+  }
+  $options = "${option_prefix}statsd.mapping-config=\'${prometheus::statsd_exporter::mapping_config_path}\' ${prometheus::statsd_exporter::extra_options}"
 
   prometheus::daemon { 'statsd_exporter':
     install_method     => $install_method,

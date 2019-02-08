@@ -68,39 +68,37 @@
 #
 #  [*version*]
 #  The binary release version
-class prometheus::process_exporter(
-  $arch                 = $::prometheus::params::arch,
-  $bin_dir              = $::prometheus::params::bin_dir,
-  $download_extension   = $::prometheus::params::process_exporter_download_extension,
-  $download_url         = undef,
-  $download_url_base    = $::prometheus::params::process_exporter_download_url_base,
-  $extra_groups         = $::prometheus::params::process_exporter_extra_groups,
-  $extra_options        = '',
-  $config_mode          = $::prometheus::params::config_mode,
-  $group                = $::prometheus::params::process_exporter_group,
-  $init_style           = $::prometheus::params::init_style,
-  $install_method       = $::prometheus::params::install_method,
-  $manage_group         = true,
-  $manage_service       = true,
-  $manage_user          = true,
-  $os                   = $::prometheus::params::os,
-  $package_ensure       = $::prometheus::params::process_exporter_package_ensure,
-  $package_name         = $::prometheus::params::process_exporter_package_name,
-  $purge_config_dir     = true,
-  $restart_on_change    = true,
-  $service_enable       = true,
-  $service_ensure       = 'running',
-  $user                 = $::prometheus::params::process_exporter_user,
-  $version              = $::prometheus::params::process_exporter_version,
-  $config_path          = $::prometheus::params::process_exporter_config_path,
-  $watched_processes    = []
-) inherits prometheus::params {
 
-  $real_download_url = pick($download_url,"${download_url_base}/download/v${version}/${package_name}-${version}.${os}-${arch}.${download_extension}")
-  validate_bool($purge_config_dir)
-  validate_bool($manage_user)
-  validate_bool($manage_service)
-  validate_bool($restart_on_change)
+class prometheus::process_exporter(
+  String $download_extension,
+  Variant[Stdlib::HTTPSUrl, Stdlib::HTTPUrl] $download_url_base,
+  Array $extra_groups,
+  String $group,
+  String $package_ensure,
+  String $package_name,
+  String $user,
+  String $version,
+  Stdlib::Absolutepath $config_path,
+  Array $watched_processes                                           = [],
+  Boolean $purge_config_dir                                          = true,
+  Boolean $restart_on_change                                         = true,
+  Boolean $service_enable                                            = true,
+  String $service_ensure                                             = 'running',
+  String $init_style                                                 = $prometheus::init_style,
+  String $install_method                                             = $prometheus::install_method,
+  Boolean $manage_group                                              = true,
+  Boolean $manage_service                                            = true,
+  Boolean $manage_user                                               = true,
+  String $os                                                         = $prometheus::os,
+  String $extra_options                                              = '',
+  String $config_mode                                                = $prometheus::config_mode,
+  Optional[Variant[Stdlib::HTTPSUrl, Stdlib::HTTPUrl]] $download_url = undef,
+  String $arch                                                       = $prometheus::real_arch,
+  Stdlib::Absolutepath $bin_dir                                      = $prometheus::bin_dir,
+) inherits prometheus {
+
+  $filename = "${package_name}-${version}.${os}-${arch}.${download_extension}"
+  $real_download_url = pick($download_url,"${download_url_base}/download/v${version}/${filename}")
   $notify_service = $restart_on_change ? {
     true    => Service['process-exporter'],
     default => undef,

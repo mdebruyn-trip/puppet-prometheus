@@ -29,6 +29,9 @@
 #  [*bin_dir*]
 #  Directory where binaries are located
 #
+#  [*bin_name*]
+#  The name of the binary to execute
+#
 #  [*package_name*]
 #  The binary package name
 #
@@ -54,28 +57,30 @@
 #  Should puppet manage the service? (default true)
 #
 define prometheus::daemon (
-  $version,
-  $real_download_url,
+  String $version,
+  Variant[Stdlib::HTTPSUrl, Stdlib::HTTPUrl] $real_download_url,
   $notify_service,
-  $user,
-  $group,
-
-  $install_method     = $::prometheus::params::install_method,
-  $download_extension = $::prometheus::params::download_extension,
-  $os                 = $::prometheus::params::os,
-  $arch               = $::prometheus::params::arch,
-  $bin_dir            = $::prometheus::params::bin_dir,
-  $package_name       = undef,
-  $package_ensure     = 'installed',
-  $manage_user        = true,
-  $extra_groups       = [],
-  $manage_group       = true,
-  $purge              = true,
-  $options            = '',
-  $init_style         = $::prometheus::params::init_style,
-  $service_ensure     = 'running',
-  $service_enable     = true,
-  $manage_service     = true,
+  String $user,
+  String $group,
+  String $install_method          = $prometheus::install_method,
+  String $download_extension      = $prometheus::download_extension,
+  String $os                      = $prometheus::os,
+  String $arch                    = $prometheus::real_arch,
+  Stdlib::Absolutepath $bin_dir   = $prometheus::bin_dir,
+  String $bin_name                = $name,
+  Optional[String] $package_name  = undef,
+  String $package_ensure          = 'installed',
+  Boolean $manage_user            = true,
+  Array $extra_groups             = [],
+  Boolean $manage_group           = true,
+  Boolean $purge                  = true,
+  String $options                 = '',
+  String $init_style              = $prometheus::init_style,
+  String $service_ensure          = 'running',
+  Boolean $service_enable         = true,
+  Boolean $manage_service         = true,
+  Hash[String, Scalar] $env_vars  = {},
+  Optional[String] $env_file_path = $prometheus::env_file_path,
 ) {
 
   case $install_method {
@@ -149,7 +154,6 @@ define prometheus::daemon (
 
 
   if $init_style {
-
     case $init_style {
       'upstart' : {
         file { "/etc/init/${name}.conf":
@@ -168,25 +172,20 @@ define prometheus::daemon (
         }
       }
       'systemd' : {
-        file { "/etc/systemd/system/${name}.service":
-          mode    => '0644',
-          owner   => 'root',
-          group   => 'root',
+        include 'systemd'
+        systemd::unit_file {"${name}.service":
           content => template('prometheus/daemon.systemd.erb'),
-        }
-        ~> exec { "${name}-systemd-reload":
-          command     => 'systemctl daemon-reload',
-          path        => [ '/usr/bin', '/bin', '/usr/sbin' ],
-          refreshonly => true,
-          notify      => $notify_service,
+          notify  => $notify_service,
         }
       }
-      'sysv' : {
+      # service_provider returns redhat on CentOS using sysv, https://tickets.puppetlabs.com/browse/PUP-5296
+      'sysv','redhat' : {
         file { "/etc/init.d/${name}":
           mode    => '0555',
           owner   => 'root',
           group   => 'root',
           content => template('prometheus/daemon.sysv.erb'),
+          notify  => $notify_service,
         }
       }
       'debian' : {
@@ -222,16 +221,33 @@ define prometheus::daemon (
     }
   }
 
+  if $env_file_path != undef {
+    file { "${env_file_path}/${name}":
+      mode    => '0644',
+      owner   => 'root',
+      group   => '0', # Darwin uses wheel
+      content => template('prometheus/daemon.env.erb'),
+      notify  => $notify_service,
+    }
+  }
+
   $init_selector = $init_style ? {
     'launchd' => "io.${name}.daemon",
     default   => $name,
   }
 
+  $real_provider = $init_style ? {
+    'sles'  => 'redhat',  # mimics puppet's default behaviour
+    'sysv'  => 'redhat',  # all currently used cases for 'sysv' are redhat-compatible
+    default => $init_style,
+  }
+
   if $manage_service == true {
     service { $name:
-      ensure => $service_ensure,
-      name   => $init_selector,
-      enable => $service_enable,
+      ensure   => $service_ensure,
+      name     => $init_selector,
+      enable   => $service_enable,
+      provider => $real_provider,
     }
   }
 }
